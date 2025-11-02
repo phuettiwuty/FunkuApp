@@ -6,6 +6,7 @@ import {
 import { db } from '../firebase/config';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import { useNavigation } from '@react-navigation/native';
+import { emit } from '../utils/eventBus';
 
 export default function SearchScreen() {
   const navigation = useNavigation();
@@ -42,13 +43,11 @@ export default function SearchScreen() {
     );
   }, [qtext, allSongs]);
 
-  // แตะแล้วส่ง params ไปหน้าหลักให้เลื่อนไปเพลงนั้น
+  // แตะแล้ว "ส่งสัญญาณ + ย้อนกลับ" (ไม่สร้าง Main ใหม่)
   const handlePick = (songId) => {
     Keyboard.dismiss();
-    navigation.navigate('Main', {
-      jumpToSongId: songId,
-      ts: Date.now(), // กันไม่อัปเดตถ้าเลือกเพลงเดิมซ้ำ
-    });
+    emit('JUMP_TO_SONG', { songId, autoplay: false }); // ไม่เล่นทันที ให้แผ่นเสียงซิงก์ก่อน
+    navigation.goBack();                               // กลับไป Main ตัวเดิม → ไม่ซ้อนสแตก
   };
 
   const renderItem = ({ item }) => (

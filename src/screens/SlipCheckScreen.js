@@ -10,17 +10,18 @@ import { doc, serverTimestamp, setDoc, updateDoc, getDoc } from 'firebase/firest
 import { useNavigation } from '@react-navigation/native';
 import { emit } from '../utils/eventBus';
 
-// ===== เปลี่ยนเป็นค่าจริงของคุณ =====
+
 const API_URL = 'https://api.slipok.com/api/line/apikey/55496';
 const AUTH_TOKEN = 'SLIPOK6JT9BS3';
-const TARGET_RECEIVER = 'ด.ช. พฤฒิวุฒิ ย';
+const TARGET_RECEIVER = 'ด.ช. พฤฒิวุฒิ ยุทธชนะ';
+const MIN_PRICE_THB = 35; 
 
 export default function SlipCheckScreen() {
   const navigation = useNavigation();
   const [imageUri, setImageUri] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // เลือกรูป
+ 
   const handlePickImage = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -38,7 +39,15 @@ export default function SlipCheckScreen() {
     }
   };
 
-  // ตรวจสลิป
+  const parseAmount = (val) => {
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const n = parseFloat(val.replace(/[^\d.]/g, ''));
+      return isNaN(n) ? 0 : n;
+    }
+    return 0;
+  };
+
   const handleSubmit = async () => {
     try {
       if (!imageUri) {
@@ -67,22 +76,38 @@ export default function SlipCheckScreen() {
       const slipData = json?.data;
       const apiSuccess = slipData?.success === true;
       const receiverName = (slipData?.receiver?.displayName || '').trim();
-      const amountLabel = slipData?.amount ? `${slipData.amount} บาท` : 'ไม่ระบุ';
+      const amountNum = parseAmount(slipData?.amount);
+      const currency = (slipData?.currency || 'THB').toUpperCase();
+
+      const amountLabel = slipData?.amount ? `${amountNum} บาท` : 'ไม่ระบุ';
       const detail =
         `จำนวนเงิน: ${amountLabel}\n` +
-        `ผู้รับโอน: ${receiverName || '-'}\n` +
+        `คนโอนเงิน: ${(slipData?.sender?.displayName || '').trim() || '-'}\n` +
+        `ผู้รับเงิน: ${receiverName || '-'}\n` +
         `วันที่/เวลา: ${slipData?.transDate || '-'} / ${slipData?.transTime || '-'}`;
 
+      // ✅ ตรวจความถูกต้องจาก API
       if (!apiSuccess) {
         Alert.alert('❌ ตรวจสอบสลิปไม่ผ่าน', detail);
         return;
       }
+      // ✅ ชื่อผู้รับต้องตรง
       if (receiverName !== TARGET_RECEIVER) {
         Alert.alert('❌ ชื่อผู้รับไม่ตรง', `${detail}\n\nต้องโอนเข้า: ${TARGET_RECEIVER}`);
         return;
       }
+      // ✅ สกุลเงินต้องเป็น THB (กันสลิปข้ามสกุล)
+      if (currency !== 'THB') {
+        Alert.alert('❌ สกุลเงินไม่รองรับ', `${detail}\n\nสกุลเงินที่รองรับ: THB`);
+        return;
+      }
+      // ✅ ขั้นต่ำ 35 บาท
+      if (amountNum < MIN_PRICE_THB) {
+        Alert.alert('❌ จำนวนเงินไม่ถึงขั้นต่ำ', `${detail}\n\nต้องชำระอย่างน้อย ${MIN_PRICE_THB} บาท`);
+        return;
+      }
 
-      // ✅ ผ่านทั้ง API และชื่อผู้รับ → อัปเดต premium ตลอดชีพ
+      // ผ่านทุกเงื่อนไข → อัปเดต premium
       const u = auth.currentUser;
       if (!u?.uid) {
         Alert.alert('ยังไม่ได้ล็อกอิน', 'โปรดเข้าสู่ระบบก่อน');
@@ -91,28 +116,34 @@ export default function SlipCheckScreen() {
 
       const userRef = doc(db, 'users', u.uid);
       const snap = await getDoc(userRef);
+      const updateData = {
+        premium: true,
+        premiumActivatedAt: serverTimestamp(),
+        lastPaymentSlipAt: serverTimestamp(),
+        lastPaymentAmountTHB: amountNum,  // ✅ บันทึกจำนวนเงิน
+        paymentProvider: 'slipok',
+      };
+
       if (snap.exists()) {
-        await updateDoc(userRef, {
-          premium: true,
-          premiumActivatedAt: serverTimestamp(),
-          lastPaymentSlipAt: serverTimestamp(),
-        });
+        await updateDoc(userRef, updateData);
       } else {
         await setDoc(userRef, {
           email: u.email || null,
           displayName: u.displayName || null,
           photoURL: u.photoURL || null,
-          premium: true,
-          premiumActivatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
+          ...updateData,
         });
       }
 
-      Alert.alert('✅ สลิปถูกต้อง', 'ปลดล็อกฟังเพลงเต็มทุกเพลงแล้ว!', [
-        { text: 'OK', onPress: () => {
-          emit('PREMIUM_UPGRADED');
-          navigation.goBack();
-        }}
+      Alert.alert('✅ สลิปถูกต้อง', `ปลดล็อกฟังเพลงเต็มทุกเพลงแล้ว!\n(ชำระ ${amountNum} บาท)`, [
+        {
+          text: 'OK',
+          onPress: () => {
+            emit('PREMIUM_UPGRADED');
+            navigation.goBack();
+          },
+        },
       ]);
     } catch (e) {
       Alert.alert('🚨 ข้อผิดพลาด', String(e?.message || e));
@@ -125,18 +156,22 @@ export default function SlipCheckScreen() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.header}>ยืนยันการชำระเงิน</Text>
-        <Text style={styles.sub}>ต้องเป็นผู้รับ: {TARGET_RECEIVER}</Text>
+        <Text style={styles.sub}>ชื่อเจ้าของบัญชี: {TARGET_RECEIVER}</Text>
+        <Text style={styles.subMin}>ขั้นต่ำในการสมัครสมาชิก: {MIN_PRICE_THB} บาท</Text>
 
         <TouchableOpacity style={styles.pickBtn} onPress={handlePickImage}>
           <Text style={styles.pickText}>{imageUri ? 'เลือกสลิปใหม่' : 'เลือกภาพสลิปจากเครื่อง'}</Text>
         </TouchableOpacity>
 
-        {imageUri && (
-          <Image source={{ uri: imageUri }} style={styles.preview} />
-        )}
+        {imageUri && <Image source={{ uri: imageUri }} style={styles.preview} />}
 
         <View style={styles.checkBox}>
-          <Button title={loading ? 'กำลังตรวจสอบ...' : 'ตรวจสอบสลิปนี้'} onPress={handleSubmit} disabled={!imageUri || loading} color="#111827" />
+          <Button
+            title={loading ? 'กำลังตรวจสอบ...' : 'ตรวจสอบสลิปนี้'}
+            onPress={handleSubmit}
+            disabled={!imageUri || loading}
+            color="#111827"
+          />
         </View>
 
         {loading && <ActivityIndicator size="large" color="#111827" style={{ marginTop: 12 }} />}
@@ -149,7 +184,8 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f6f7fb' },
   scroll: { padding: 16 },
   header: { fontSize: 20, fontWeight: '800', marginBottom: 4, color: '#111' },
-  sub: { color: '#6b7280', marginBottom: 12 },
+  sub: { color: '#6b7280', marginBottom: 4 },
+  subMin: { color: '#374151', marginBottom: 12, fontWeight: '700' },
   pickBtn: { backgroundColor: '#111827', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   pickText: { color: '#fff', fontWeight: '700' },
   preview: {

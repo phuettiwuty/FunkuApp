@@ -19,7 +19,6 @@ export default function DrawerNavigator() {
     <Drawer.Navigator initialRouteName="Profile" screenOptions={{ headerShown: true }}>
       <Drawer.Screen name="Profile" component={ProfileScreen} />
       <Drawer.Screen name="Change password" component={ChangePasswordScreen} />
-      <Drawer.Screen name="Friends" component={FriendsScreen} />
       {isJed && (
         <Drawer.Screen name="songs" component={SongsGlobalScreen} />
       )}

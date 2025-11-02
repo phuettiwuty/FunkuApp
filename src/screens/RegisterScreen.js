@@ -2,12 +2,15 @@
 import React, { useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  Linking, ScrollView
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { auth, db } from '../firebase/config'; // <-- เปลี่ยน path ให้ตรงโปรเจกต์
+import { auth, db } from '../firebase/config';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+
+const PRIMARY = 'hsla(140, 94%, 52%, 1.00)';
 
 export default function RegisterScreen() {
   const navigation = useNavigation();
@@ -20,33 +23,39 @@ export default function RegisterScreen() {
   const [loading, setLoading] = useState(false);
 
   const onRegister = async () => {
+    const name = displayName.trim();
     const em = email.trim();
     const pw = password;
-    const name = displayName.trim();
 
-    if (!name || !em || !pw) return Alert.alert('ข้อมูลไม่ครบ', 'กรอกชื่อ อีเมล และรหัสผ่าน');
+    if (!name || !em || !pw) {
+      return Alert.alert('ข้อมูลไม่ครบ', 'กรอกชื่อ อีเมล และรหัสผ่านให้ครบ');
+    }
+    if (pw.length < 6) {
+      return Alert.alert('รหัสสั้นเกินไป', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+    }
 
     try {
       setLoading(true);
 
-      // สมัครผู้ใช้
+      // 1) สมัครผู้ใช้
       const cred = await createUserWithEmailAndPassword(auth, em, pw);
 
-      // ตั้งค่าโปรไฟล์ใน Firebase Auth
+      // 2) ตั้งชื่อ/รูปใน Firebase Auth
       await updateProfile(cred.user, {
         displayName: name,
         photoURL: photoURL || null,
       });
 
-      // สร้างเอกสาร users/{uid} (สำคัญ: เพื่อให้ ProfileScreen อัปเดตได้)
+      // 3) บันทึกเอกสารผู้ใช้ใน Firestore
       await setDoc(doc(db, 'users', cred.user.uid), {
         displayName: name,
         photoURL: photoURL || null,
         email: em,
+        premium: false,                // ค่าเริ่มต้นยังไม่พรีเมียม
         createdAt: serverTimestamp(),
       });
 
-      // ไปหน้า Main ทันที
+      // 4) ไปหน้า Main และล้าง stack
       navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
     } catch (e) {
       Alert.alert('สมัครไม่สำเร็จ', String(e?.message || e));
@@ -60,69 +69,109 @@ export default function RegisterScreen() {
       style={styles.container}
       behavior={Platform.select({ ios: 'padding', android: undefined })}
     >
-      <View style={styles.card}>
-        <Text style={styles.title}>Register</Text>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        <View style={styles.card}>
+          <Text style={styles.title}>Sign up</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Display name"
-          value={displayName}
-          onChangeText={setDisplayName}
-        />
+          <Text style={styles.label}>Display name:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Your name"
+            placeholderTextColor="#9ca3af"
+            value={displayName}
+            onChangeText={setDisplayName}
+            returnKeyType="next"
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Photo URL (optional)"
-          autoCapitalize="none"
-          value={photoURL}
-          onChangeText={setPhotoURL}
-        />
+          <Text style={[styles.label, { marginTop: 8 }]}>Photo URL (optional):</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="https://..."
+            placeholderTextColor="#9ca3af"
+            autoCapitalize="none"
+            value={photoURL}
+            onChangeText={setPhotoURL}
+            returnKeyType="next"
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
+          <Text style={[styles.label, { marginTop: 8 }]}>Email:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="name@example.com"
+            placeholderTextColor="#9ca3af"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            returnKeyType="next"
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password (>= 6 ตัว)"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+          <Text style={[styles.label, { marginTop: 8 }]}>Password:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="อย่างน้อย 6 ตัวอักษร"
+            placeholderTextColor="#9ca3af"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={onRegister}
+          />
 
-        <TouchableOpacity
-          style={[styles.btn, loading && { opacity: 0.7 }]}
-          onPress={onRegister}
-          disabled={loading}
-        >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>สมัครสมาชิก</Text>}
-        </TouchableOpacity>
-
-        <View style={styles.row}>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
-            <Text style={styles.link}>มีบัญชีอยู่แล้ว? เข้าสู่ระบบ</Text>
+          <TouchableOpacity
+            style={[styles.btn, loading && { opacity: 0.7 }]}
+            onPress={onRegister}
+            disabled={loading}
+            activeOpacity={0.9}
+          >
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>สร้างบัญชี</Text>}
           </TouchableOpacity>
+
+          <View style={styles.loginRow}>
+            <Text style={styles.muted}>มีบัญชีอยู่แล้ว? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+              <Text style={styles.loginLink}>เข้าสู่ระบบ</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 16 },
-  card: { backgroundColor: 'white', borderRadius: 16, padding: 18, elevation: 4 },
-  title: { fontSize: 20, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+  // layout ให้เข้ากับหน้า Login
+  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  title: {
+    fontSize: 28, fontWeight: '800', color: PRIMARY, textAlign: 'center', marginBottom: 16,
+  },
+  label: { color: '#374151', fontWeight: '600', marginBottom: 6 },
   input: {
     borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10, backgroundColor: '#fff',
+    paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#fff', color: '#111827',
   },
-  btn: { backgroundColor: '#111827', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  btnText: { color: 'white', fontWeight: '700' },
-  row: { flexDirection: 'row', justifyContent: 'center', marginTop: 12 },
-  link: { color: '#2563eb', fontWeight: '600' },
+
+  btn: {
+    backgroundColor: PRIMARY, paddingVertical: 14, borderRadius: 10,
+    alignItems: 'center', marginTop: 16,
+  },
+  btnText: { color: 'white', fontWeight: '700', fontSize: 16 },
+
+  loginRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 14 },
+  muted: { color: '#6b7280' },
+  loginLink: { color: PRIMARY, fontWeight: '700' },
+
+  link: { color: PRIMARY, fontWeight: '600', textDecorationLine: 'underline' },
+  termsText: { color: '#6b7280', textAlign: 'center', fontSize: 12, marginTop: 14, lineHeight: 18 },
 });

@@ -1,31 +1,54 @@
 // src/screens/LoginScreen.js
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, KeyboardAvoidingView, Platform
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
+  ScrollView, Animated, Easing
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { auth } from '../firebase/config'; // <-- เปลี่ยน path ถ้าไฟล์คุณอยู่คนละที่
+import { auth } from '../firebase/config';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export default function LoginScreen() {
   const navigation = useNavigation();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-
   const [loading, setLoading] = useState(false);
+
+  // 🔹 ค่าอนิเมชันสำหรับซูมอิน/เฟดเอาต์
+  const scale = useRef(new Animated.Value(1)).current;
+  const fade  = useRef(new Animated.Value(1)).current;
+
+  const playZoomAndGo = async () => {
+    // เล่นอนิเมชัน แล้วค่อยนำทาง (รอให้จบก่อน)
+    await new Promise((resolve) => {
+      Animated.parallel([
+        Animated.timing(scale, {
+          toValue: 1.06,
+          duration: 260,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(fade, {
+          toValue: 0,
+          duration: 220,
+          useNativeDriver: true,
+        }),
+      ]).start(() => resolve());
+    });
+    navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+  };
 
   const onLogin = async () => {
     const em = email.trim();
-    const pw = password;
-    if (!em || !pw) return Alert.alert('ข้อมูลไม่ครบ', 'กรอกอีเมลและรหัสผ่าน');
-
+    if (!em || !password) {
+      return Alert.alert('ข้อมูลไม่ครบ', 'กรอกอีเมลและรหัสผ่านให้ครบ');
+    }
     try {
       setLoading(true);
-      await signInWithEmailAndPassword(auth, em, pw);
-
-      // ไปหน้า Main ทันที (และเคลียร์ stack)
-      navigation.reset({ index: 0, routes: [{ name: 'Main' }] });
+      await signInWithEmailAndPassword(auth, em, password);
+      await playZoomAndGo(); // ✅ ซูมอินก่อนพาไป Main
     } catch (e) {
       Alert.alert('เข้าสู่ระบบไม่สำเร็จ', String(e?.message || e));
     } finally {
@@ -38,57 +61,101 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.select({ ios: 'padding', android: undefined })}
     >
-      <View style={styles.card}>
-        <Text style={styles.title}>Login</Text>
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        {/* ครอบการ์ดด้วย Animated.View เพื่อให้ซูมทั้งบล็อก */}
+        <Animated.View style={[styles.card, { transform: [{ scale }], opacity: fade }]}>
+          <Text style={styles.title}>Login</Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          keyboardType="email-address"
-          autoCapitalize="none"
-          value={email}
-          onChangeText={setEmail}
-        />
+          <Text style={styles.label}>Email:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="name@example.com"
+            placeholderTextColor="#9ca3af"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            value={email}
+            onChangeText={setEmail}
+            returnKeyType="next"
+          />
 
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-        />
+          <Text style={[styles.label, { marginTop: 8 }]}>Password:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="••••••••"
+            placeholderTextColor="#9ca3af"
+            secureTextEntry
+            value={password}
+            onChangeText={setPassword}
+            returnKeyType="done"
+            onSubmitEditing={onLogin}
+          />
 
-        <TouchableOpacity
-          style={[styles.btn, loading && { opacity: 0.7 }]}
-          onPress={onLogin}
-          disabled={loading}
-        >
-          {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>เข้าสู่ระบบ</Text>}
-        </TouchableOpacity>
+          {/* ลิงก์ Forgot Password ชิดขวา */}
+          <View style={styles.linksRowRight}>
+            <TouchableOpacity onPress={() => navigation.navigate('ForgetPassword')}>
+              <Text style={styles.link}>Forgot Password ?</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.row}>
-          <TouchableOpacity onPress={() => navigation.navigate('ForgetPassword')}>
-            <Text style={styles.link}>ลืมรหัสผ่าน?</Text>
+          <TouchableOpacity
+            style={[styles.btn, loading && { opacity: 0.7 }]}
+            onPress={onLogin}
+            disabled={loading}
+            activeOpacity={0.9}
+          >
+            {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>Login</Text>}
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.link}>สมัครสมาชิก</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+
+          <View style={styles.signupRow}>
+            <Text style={styles.muted}>ยังไม่มีรหัส? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+              <Text style={styles.signupLink}>สมัครผู้ใช้ใหม่</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.termsText}>
+            จัดทำขึ้นเพื่อการศึกษาในรายภาควิชา Mobile Application Development
+          </Text>
+        </Animated.View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
+const PRIMARY = '#0edd6bff';
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a', justifyContent: 'center', padding: 16 },
-  card: { backgroundColor: 'white', borderRadius: 16, padding: 18, elevation: 4 },
-  title: { fontSize: 20, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+  container: { flex: 1, backgroundColor: '#f3f4f6' },
+  scroll: { flexGrow: 1, justifyContent: 'center', padding: 20 },
+  card: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
+  },
+  title: {
+    fontSize: 28, fontWeight: '800', color: PRIMARY, textAlign: 'center', marginBottom: 16,
+  },
+  label: { color: '#374151', fontWeight: '600', marginBottom: 6 },
   input: {
     borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 10, backgroundColor: '#fff',
+    paddingHorizontal: 12, paddingVertical: 12, backgroundColor: '#fff', color: '#111827',
   },
-  btn: { backgroundColor: '#111827', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
-  btnText: { color: 'white', fontWeight: '700' },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
-  link: { color: '#2563eb', fontWeight: '600' },
+  linksRowRight: { alignItems: 'flex-end', marginTop: 10 },
+  btn: {
+    backgroundColor: PRIMARY, paddingVertical: 14, borderRadius: 10,
+    alignItems: 'center', marginTop: 16,
+  },
+  btnText: { color: 'white', fontWeight: '700', fontSize: 16 },
+
+  signupRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 14 },
+  muted: { color: '#6b7280' },
+  signupLink: { color: PRIMARY, fontWeight: '700' },
+
+  link: { color: PRIMARY, fontWeight: '600', textDecorationLine: 'underline' },
+  termsText: { color: '#6b7280', textAlign: 'center', fontSize: 12, marginTop: 14, lineHeight: 18 },
 });
