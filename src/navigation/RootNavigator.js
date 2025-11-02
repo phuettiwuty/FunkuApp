@@ -7,9 +7,10 @@ import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import ForgetPasswordScreen from '../screens/ForgetPasswordScreen';
 import MainScreen from '../screens/MainScreen';
-import ProfileScreen from '../screens/ProfileScreen';       // << เพิ่ม
+import ProfileScreen from '../screens/ProfileScreen';      
 import SongsGlobalScreen from '../screens/SongsGlobalScreen';
 import SearchScreen from '../screens/SearchScreen';
+import SlipCheckScreen from '../screens/SlipCheckScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -19,8 +20,8 @@ export default function RootNavigator() {
       <Stack.Screen name="Splash" component={SplashScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
       <Stack.Screen name="Register" component={RegisterScreen} />
-      <Stack.Screen name="SearchScreen" component={SearchScreen} options={{ headerShown: true, title: 'Search' }}
-/>
+      <Stack.Screen name="SearchScreen" component={SearchScreen} options={{ headerShown: true, title: 'Search' }}/>
+      <Stack.Screen name="SlipCheck" component={SlipCheckScreen} options={{ headerShown: true, title: 'Confirm Payment' }}/>
       <Stack.Screen
         name="ForgetPassword"
         component={ForgetPasswordScreen}
