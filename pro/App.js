@@ -1,4 +1,3 @@
-// App.js
 import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
@@ -10,28 +9,40 @@ import {
   Pressable,
   StatusBar,
   Animated,
+  SafeAreaView,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import Slider from '@react-native-community/slider';
 
+
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+
+
+import ProfileScreen from './screens/ProfileScreen';
+
+
+
+
+const Tab = createBottomTabNavigator();
 const { height } = Dimensions.get('window');
 
 // -------------------- SONG DATA --------------------
 const FEED_SONGS = [
   {
     id: '1',
-    title: 'ความรักทำให้คนตาบอด',
-    artist: 'bodyslam',
+    title: 'G2ดิวะ',
+    artist: 'G2',
     audioUrl:
-      'https://vertical-indigo-osnzjjzsvh.edgeone.app/%E0%B8%84%E0%B8%A7%E0%B8%B2%E0%B8%A1%E0%B8%A3%E0%B8%81%E0%B8%97%E0%B8%B3%E0%B9%83%E0%B8%AB%E0%B8%84%E0%B8%99%E0%B8%95%E0%B8%B2%E0%B8%9A%E0%B8%AD%E0%B8%94%20-%20bodyslamOFFICIAL%20MV.mp3',
-    cover: 'https://musicstation.kapook.com/files_music2008/picture/0/3057.jpg',
+      'https://drive.google.com/uc?export=download&id=1LmC2Qy61qANvY2KQGXHoJV6wc9jaSAWW',
+    cover: 'https://i.ytimg.com/vi/njCoaYvbk4Y/hqdefault.jpg',
   },
   {
     id: '2',
     title: 'MINISKIRT',
     artist: 'AOA',
     audioUrl:
-      'https://circular-scarlet-mfseujzqim.edgeone.app/AOA%20-%20%EC%A7%A7%EC%9D%80%20%EC%B9%98%EB%A7%88%20(Miniskirt)%20MV.mp3',
+      'https://drive.google.com/uc?export=download&id=1z2HX_DXH9gGtsUqW0j01-FTdbcNqo8JZ',
     cover: 'https://f.ptcdn.info/211/048/000/oisseoj8jW4SOoBeGWN-o.jpg',
   },
   {
@@ -39,7 +50,7 @@ const FEED_SONGS = [
     title: 'จำทำไม',
     artist: 'ศักศรี',
     audioUrl:
-      'https://isolated-red-hs1rq5h0fu.edgeone.app/%E0%B8%88%E0%B8%B3%E0%B8%97%E0%B8%B3%E0%B9%84%E0%B8%A1.mp3',
+      'https://drive.google.com/uc?export=download&id=1zWAQQOo6gGRRg1oUtE3QRv1rvj19d0vf',
     cover: 'https://s.isanook.com/jo/0/ud/489/2449389/tattoocolour.jpg?ip/crop/w670h402/q80/jpg',
   },
   {
@@ -47,15 +58,14 @@ const FEED_SONGS = [
     title: 'ที่หนึ่งที่คูเมือง',
     artist: 'ILLSLICK',
     audioUrl:
-      'https://regular-ivory-quipo7itay.edgeone.app/ILLSLICK.mp3',
+      'https://drive.google.com/uc?export=download&id=1j6IqGKZ2w8EU11HTBqi7im29JUBR5__B',
     cover: 'https://thethaiger.com/th/wp-content/uploads/2025/04/snapins-ai_3615016547917506199-1.jpg',
   },
 ];
 
-export default function App() {
+function SongFeedScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // ให้เล่นใน silent ได้
   useEffect(() => {
     (async () => {
       await Audio.setAudioModeAsync({
@@ -99,6 +109,51 @@ export default function App() {
     </View>
   );
 }
+
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Tab.Navigator
+        initialRouteName="Feed"
+        screenOptions={({ route }) => ({
+          headerShown: false,
+          tabBarActiveTintColor: 'white',
+          tabBarInactiveTintColor: 'gray',
+          tabBarStyle: {
+            backgroundColor: 'black',
+            borderTopWidth: 0,
+            position: 'absolute',
+          },
+          // ตั้งค่าไอคอนสำหรับแต่ละ Tab
+          tabBarIcon: ({ color, size }) => {
+            let iconName;
+
+            if (route.name === 'Feed') {
+              iconName = '♬';
+            } else if (route.name === 'Profile') {
+              iconName = '👤';
+            }
+
+            return <Text style={{ color, fontSize: size + 4 }}>{iconName}</Text>;
+          },
+        })}
+      >
+        <Tab.Screen 
+            name="Feed" 
+            component={SongFeedScreen} 
+            options={{ title: 'Home' }}
+        />
+        <Tab.Screen 
+            name="Profile" 
+            component={ProfileScreen} 
+            options={{ title: 'Profile' }}
+        />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}
+
 
 // ================ SONG ITEM ================
 function SongFeedItem({ item, isActive }) {
@@ -313,7 +368,7 @@ const styles = StyleSheet.create({
   cover: {
     width: 220,
     height: 220,
-    borderRadius: 110, // ให้เหมือนแผ่น
+    borderRadius: 110,
     marginBottom: 24,
     borderWidth: 5,
     borderColor: 'rgba(255,255,255,0.3)',
@@ -330,7 +385,7 @@ const styles = StyleSheet.create({
   },
   sliderBox: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 200, // ปรับให้สูงขึ้น
     left: 32,
     right: 32,
   },
@@ -345,7 +400,7 @@ const styles = StyleSheet.create({
   },
   heartBox: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 120, // ปรับให้สูงขึ้น
     alignSelf: 'center',
   },
   heart: {
