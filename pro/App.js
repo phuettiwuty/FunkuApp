@@ -31,7 +31,7 @@ const FEED_SONGS = [
     title: 'MINISKIRT',
     artist: 'AOA',
     audioUrl:
-      'https://circular-scarlet-mfseujzqim.edgeone.app/AOA%20-%20%EC%A7%A7%EC%9D%80%20%EC%B9%98%EB%A7%88%20(Miniskirt)%20MV.mp3',
+      'https://drive.google.com/uc?export=download&id=1z2HX_DXH9gGtsUqW0j01-FTdbcNqo8JZ',
     cover: 'https://f.ptcdn.info/211/048/000/oisseoj8jW4SOoBeGWN-o.jpg',
   },
   {
