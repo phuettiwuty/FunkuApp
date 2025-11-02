@@ -1,47 +1,45 @@
 // src/screens/MainScreen.js
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, FlatList, Dimensions, StyleSheet, Image, Pressable,
+  View, Text, FlatList, StyleSheet, Image, Pressable,
   StatusBar, Animated, SafeAreaView, Alert, Modal
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Audio } from 'expo-av';
 import { useAuth } from '../context/AuthContext';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useWindowDimensions } from 'react-native';
 import { IconButton } from 'react-native-paper';
 
 // Firebase
-import { auth, db } from '../firebase/config';
+import { db } from '../firebase/config';
 import {
-  collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp, getDoc, updateDoc
+  collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 
 // Event bus
 import { emit, on } from '../utils/eventBus';
 
-const { height } = Dimensions.get('window');
-
-// ---- ตั้งค่า paywall ----
+// ---- Paywall config ----
 const FREE_PREVIEW_MS = 15_000;
-// ถ้ามี URL โฮสต์ภาพ QR ให้ใส่ลงไปแทน null
-const QR_REMOTE_URL = null;
-// ใช้รูปโลคัล (วางไฟล์ที่ src/assets/qrcode.jpg)
-const QR_SOURCE = QR_REMOTE_URL
-  ? { uri: QR_REMOTE_URL }
-  : require('../../assets/qrcode.jpg');
+const BOTTOM_BAR_HEIGHT = 64;
+// วางไฟล์ไว้ที่ src/assets/qrcode.jpg หรือเปลี่ยนเป็น URL ก็ได้
+const QR_SOURCE = require('../../assets/qrcode.jpg');
 
 export default function MainScreen() {
   const { user } = useAuth();
   const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
 
-  // premium state (ดึงจาก users/{uid}.premium)
+  // premium state
   const [isPremium, setIsPremium] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);       // ล็อกไม่ให้เล่นจนกว่าจะจ่าย
-  const [paywallOpen, setPaywallOpen] = useState(false); // โชว์ QR overlay
+  const [isLocked, setIsLocked] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
 
-  // subscribe premium flag
+  // subscribe premium flag realtime
   useEffect(() => {
     if (!user?.uid) { setIsPremium(false); return; }
     const unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
@@ -56,14 +54,25 @@ export default function MainScreen() {
     return () => unsub && unsub();
   }, [user?.uid]);
 
-  // เมื่อออกจาก Main → หยุดเพลงทั้งหมด
+  // รับ params จาก Search แล้วสั่ง jump ไปเพลงนั้น
+  useEffect(() => {
+    const targetId = route.params?.jumpToSongId;
+    const bump = route.params?.ts; // ทำให้ effect trigger ทุกครั้งที่เลือก
+    if (targetId) {
+      emit('JUMP_TO_SONG', targetId);
+      // เคลียร์ params เพื่อให้เลือกเพลงเดิมซ้ำได้อีก
+      navigation.setParams({ jumpToSongId: undefined, ts: undefined });
+    }
+  }, [route.params?.jumpToSongId, route.params?.ts]);
+
+  // ออกจาก Main → หยุดเพลงทั้งหมด
   useFocusEffect(
     React.useCallback(() => {
       return () => emit('STOP_AUDIO');
     }, [])
   );
 
-  // ฟังสัญญาณจาก player ว่าต้องให้จ่ายเงิน
+  // ฟังสัญญาณจาก player ให้โชว์ paywall / หลังยกระดับพรีเมียม
   useEffect(() => {
     const offRequire = on('REQUIRE_PREMIUM', () => {
       if (!isPremium) {
@@ -72,12 +81,10 @@ export default function MainScreen() {
         emit('STOP_AUDIO');
       }
     });
-    // จ่ายเงินสำเร็จ (มาจาก SlipCheckScreen)
     const offUpgraded = on('PREMIUM_UPGRADED', () => {
       setIsPremium(true);
       setIsLocked(false);
       setPaywallOpen(false);
-      // ไม่ auto-play เพื่อไม่ให้เสียงเด้งโดยไม่ตั้งใจ
     });
     return () => { offRequire && offRequire(); offUpgraded && offUpgraded(); };
   }, [isPremium]);
@@ -93,7 +100,6 @@ export default function MainScreen() {
   };
 
   const confirmPayment = () => {
-    // ไปตรวจสลิป
     navigation.navigate('SlipCheck');
   };
 
@@ -120,36 +126,31 @@ export default function MainScreen() {
         isLocked={isLocked}
       />
 
-      {/* Paywall Modal (บังคับให้จ่าย) */}
+      {/* Paywall Modal - แตะพื้นหลังหรือปุ่ม × เพื่อปิดได้ */}
       <Modal
-  visible={paywallOpen}
-  animationType="fade"
-  transparent
-  onRequestClose={() => setPaywallOpen(false)} // ปุ่ม back Android ปิดได้
->
-  {/* แตะพื้นหลังเพื่อปิด */}
-  <Pressable style={styles.paywallBackdrop} onPress={() => setPaywallOpen(false)}>
-    {/* กดภายในกล่องจะไม่ปิด (จับทัชไว้ที่กล่อง) */}
-    <Pressable style={styles.paywallBox} onPress={() => {}}>
-      {/* ปุ่มปิดมุมขวาบน */}
-      <Pressable style={styles.closeBtn} onPress={() => setPaywallOpen(false)} hitSlop={10}>
-        <Text style={styles.closeTxt}>×</Text>
-      </Pressable>
+        visible={paywallOpen}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setPaywallOpen(false)}
+      >
+        <Pressable style={styles.paywallBackdrop} onPress={() => setPaywallOpen(false)}>
+          <Pressable style={styles.paywallBox} onPress={() => {}}>
+            <Pressable style={styles.closeBtn} onPress={() => setPaywallOpen(false)} hitSlop={10}>
+              <Text style={styles.closeTxt}>×</Text>
+            </Pressable>
 
-      <Text style={styles.paywallTitle}>ปลดล็อกฟังเพลงเต็มตลอดชีพ</Text>
-      <Text style={styles.paywallText}>
-        ตอนนี้คุณสามารถฟังได้ฟรี {FREE_PREVIEW_MS / 1000} วินาทีต่อเพลง
-        หากต้องการฟังเต็มทุกเพลงและตลอดชีพ โปรดสแกนชำระเงินครั้งเดียว
-      </Text>
-
-      <Image source={QR_SOURCE} style={styles.qr} />
-
-      <Pressable style={styles.payBtn} onPress={confirmPayment}>
-        <Text style={styles.payBtnText}>ยืนยันการชำระเงิน / ตรวจสลิป</Text>
-      </Pressable>
-    </Pressable>
-  </Pressable>
-</Modal>
+            <Text style={styles.paywallTitle}>ปลดล็อกฟังเพลงเต็มตลอดชีพ</Text>
+            <Text style={styles.paywallText}>
+              ตอนนี้คุณฟังฟรี {FREE_PREVIEW_MS / 1000} วินาทีต่อเพลง
+              หากต้องการฟังเต็มทุกเพลงและตลอดชีพ โปรดสแกนชำระเงินครั้งเดียว
+            </Text>
+            <Image source={QR_SOURCE} style={styles.qr} />
+            <Pressable style={styles.payBtn} onPress={confirmPayment}>
+              <Text style={styles.payBtnText}>ยืนยันการชำระเงิน / ตรวจสลิป</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* แถบล่าง (Home / Profile) */}
       <View style={styles.bottomBar}>
@@ -164,13 +165,19 @@ export default function MainScreen() {
   );
 }
 
-/** ----------------- Feed ----------------- */
+/** ----------------- Feed: รวม iOS fix (itemHeight) + JUMP_TO_SONG + likes ----------------- */
 function SongFeedScreen({ currentUser, isPremium, isLocked }) {
   const [songs, setSongs] = useState([]);
   const [likedIds, setLikedIds] = useState(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const listRef = useRef(null);
+  const pendingSongIdRef = useRef(null);
+
+  // คำนวณความสูง item ให้พอดีกับพื้นที่จริงบนหน้าจอ (iOS fix)
+  const { height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const ITEM_HEIGHT = Math.round(winH - (BOTTOM_BAR_HEIGHT + (insets?.bottom || 0)));
 
   // READ: songs
   useEffect(() => {
@@ -227,13 +234,47 @@ function SongFeedScreen({ currentUser, isPremium, isLocked }) {
     }
   };
 
+  // ฟังคำสั่ง "เลื่อนไปเพลงนี้" จาก Main (ส่งมาจาก Search ผ่าน route params)
+  useEffect(() => {
+    const off = on('JUMP_TO_SONG', (songId) => {
+      pendingSongIdRef.current = songId;
+      const idx = songs.findIndex((s) => s.id === songId);
+      if (idx >= 0) jumpToIndex(idx);
+    });
+    return off;
+  }, [songs]);
+
+  // ถ้าเพลงเพิ่งโหลด/อัปเดต แล้วมี pendingSongId → ลองเลื่อนอีกครั้ง
+  useEffect(() => {
+    if (!pendingSongIdRef.current || songs.length === 0) return;
+    const idx = songs.findIndex((s) => s.id === pendingSongIdRef.current);
+    if (idx >= 0) {
+      jumpToIndex(idx);
+      pendingSongIdRef.current = null;
+    }
+  }, [songs]);
+
+  const jumpToIndex = (idx) => {
+    try {
+      listRef.current?.scrollToIndex({ index: idx, animated: true });
+      setCurrentIndex(idx);
+    } catch (e) {
+      setTimeout(() => {
+        try {
+          listRef.current?.scrollToIndex({ index: idx, animated: true });
+          setCurrentIndex(idx);
+        } catch {}
+      }, 50);
+    }
+  };
+
   const viewabilityConfig = { viewAreaCoveragePercentThreshold: 80 };
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) setCurrentIndex(viewableItems[0].index);
   }).current;
 
   return (
-    <View style={{ flex: 1, paddingBottom: 64 }}>
+    <View style={{ flex: 1 }}>
       <FlatList
         ref={listRef}
         data={songs}
@@ -246,27 +287,25 @@ function SongFeedScreen({ currentUser, isPremium, isLocked }) {
             onToggleLike={() => toggleLike(item)}
             isPremium={isPremium}
             isLocked={isLocked}
+            itemHeight={ITEM_HEIGHT} // ใช้ความสูงจริงของ viewport
           />
         )}
         pagingEnabled
+        snapToInterval={ITEM_HEIGHT}               // สำคัญ: ให้ snap ตามความสูงจริง
+        decelerationRate="fast"
+        getItemLayout={(_, i) => ({ length: ITEM_HEIGHT, offset: ITEM_HEIGHT * i, index: i })}
+        contentInsetAdjustmentBehavior="never"     // iOS ไม่ให้ระบบขยับให้เอง
         showsVerticalScrollIndicator={false}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
-        snapToAlignment="start"
-        decelerationRate="fast"
-        getItemLayout={(_, i) => ({ length: height, offset: height * i, index: i })}
-        ListEmptyComponent={
-          <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: 'white' }}>ยังไม่มีเพลงในระบบ</Text>
-          </SafeAreaView>
-        }
+        contentContainerStyle={{}}
       />
     </View>
   );
 }
 
-/** ----------------- Song item (preview 15 วิ) ----------------- */
-function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLocked }) {
+/** ----------------- Song item (preview 15 วิ + paywall) ----------------- */
+function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLocked, itemHeight }) {
   const soundRef = useRef(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [positionMillis, setPositionMillis] = useState(0);
@@ -309,19 +348,19 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLock
           setPositionMillis(status.positionMillis || 0);
           setDurationMillis(status.durationMillis || 1);
 
-          // ถ้าไม่พรีเมียม → ครบ 15 วิ ให้หยุด + โชว์ paywall
+          // ฟรี: ครบ 15 วิ หยุด + เรียก paywall
           if (!isPremium && !gatedRef.current) {
             const pos = status.positionMillis || 0;
             if (pos >= FREE_PREVIEW_MS) {
               gatedRef.current = true;
-              try { sound.pauseAsync(); } catch (e) {}
+              try { sound.pauseAsync(); } catch {}
               setIsPlaying(false);
               stopSpinning();
               emit('REQUIRE_PREMIUM');
             }
           }
 
-          // วนเล่นเฉพาะคนพรีเมียม
+          // พรีเมียม: เล่นวน
           if (isPremium && status.didJustFinish) {
             sound.replayAsync();
           }
@@ -336,17 +375,13 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLock
     };
   }, [item.audioUrl, isPremium]);
 
-  // คุมเล่น/หยุดตามการมองเห็น
+  // คุมเล่น/หยุดตามการมองเห็น + สถานะล็อก
   useEffect(() => {
     const run = async () => {
       if (!isLoaded || !soundRef.current) return;
       try {
         if (isActive && !isLocked) {
-          // ถ้าล็อกไว้ (ไม่จ่าย) ไม่ให้เล่น
-          if (!isPremium && gatedRef.current) {
-            emit('REQUIRE_PREMIUM');
-            return;
-          }
+          if (!isPremium && gatedRef.current) { emit('REQUIRE_PREMIUM'); return; }
           await soundRef.current.playAsync();
           setIsPlaying(true);
           startSpinning();
@@ -355,7 +390,7 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLock
           setIsPlaying(false);
           stopSpinning();
         }
-      } catch (e) {}
+      } catch {}
     };
     run();
   }, [isActive, isLoaded, isLocked, isPremium]);
@@ -377,16 +412,13 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLock
     return off;
   }, []);
 
-  // แตะเพื่อ toggle play/pause
+  // แตะเพื่อ toggle play/pause (ถ้ายังไม่พรีเมียมและโดน gate แล้ว จะเด้ง paywall)
   const handleTap = async () => {
     if (!soundRef.current) return;
-
-    // ถ้ายังไม่จ่ายและโดน gate แล้ว → บังคับ paywall
     if (!isPremium && (isLocked || gatedRef.current)) {
       emit('REQUIRE_PREMIUM');
       return;
     }
-
     const status = await soundRef.current.getStatusAsync();
     if (status.isPlaying) {
       await soundRef.current.pauseAsync();
@@ -414,20 +446,17 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLock
     if (!soundRef.current) return;
     try {
       await soundRef.current.setPositionAsync(valSec * 1000);
-
-      // ถ้าขยับข้าม 15 วิในโหมดฟรี → gate ทันที
       if (!isPremium && valSec * 1000 >= FREE_PREVIEW_MS) {
         gatedRef.current = true;
         emit('REQUIRE_PREMIUM');
         return;
       }
-
       if (wasPlayingBeforeSlide.current) {
         await soundRef.current.playAsync();
         setIsPlaying(true);
         startSpinning();
       }
-    } catch (e) {}
+    } catch {}
   };
 
   // แอนิเมชันหมุน
@@ -466,7 +495,7 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLock
   const totalSec = durationMillis / 1000;
 
   return (
-    <Pressable style={styles.page} onPress={handleTap}>
+    <Pressable style={[styles.page, { height: itemHeight }]} onPress={handleTap}>
       {!!item.cover && (
         <Image source={{ uri: item.cover }} style={StyleSheet.absoluteFill} blurRadius={25} />
       )}
@@ -514,7 +543,11 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike, isPremium, isLock
 
 const styles = StyleSheet.create({
   // player page
-  page: { height, backgroundColor: 'black', justifyContent: 'center', alignItems: 'center' },
+  page: {
+    backgroundColor: 'black',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
   center: { alignItems: 'center' },
   cover: {
@@ -541,7 +574,7 @@ const styles = StyleSheet.create({
   // top bar
   topBar: {
     position: 'absolute',
-    top: 0, left: 0, right: -15,
+    top: 0, left: 0, right: 0,
     height: -48,
     flexDirection: 'row',
     alignItems: 'flex-end',
@@ -559,6 +592,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'white', borderRadius: 16, padding: 16, width: '100%', maxWidth: 380,
     alignItems: 'center',
   },
+  closeBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  closeTxt: {
+    fontSize: 28,
+    lineHeight: 28,
+    color: '#9ca3af',
+  },
   paywallTitle: { fontSize: 18, fontWeight: '800', marginBottom: 6, color: '#111' },
   paywallText: { color: '#4b5563', textAlign: 'center', marginBottom: 12 },
   qr: { width: 260, height: 360, resizeMode: 'contain', borderRadius: 12, backgroundColor: '#fff', marginBottom: 12 },
@@ -568,26 +616,11 @@ const styles = StyleSheet.create({
   // bottom bar
   bottomBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    height: 64, backgroundColor: '#0a0a0a', flexDirection: 'row',
+    height: BOTTOM_BAR_HEIGHT, backgroundColor: '#0a0a0a', flexDirection: 'row',
     borderTopWidth: 0, alignItems: 'center', justifyContent: 'space-around',
   },
   tabBtn: { paddingHorizontal: 24, paddingVertical: 10, borderRadius: 12 },
   tabActive: { backgroundColor: '#111827' },
   tabText: { color: 'gray', fontWeight: '700' },
   tabTextActive: { color: 'white' },
-  closeBtn: {
-  position: 'absolute',
-  top: 8,
-  right: 8,
-  width: 32,
-  height: 32,
-  borderRadius: 16,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-closeTxt: {
-  fontSize: 28,
-  lineHeight: 28,
-  color: '#9ca3af',
-},
 });
