@@ -1,16 +1,19 @@
 // src/screens/SearchScreen.js
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, StyleSheet, FlatList, Image, TouchableOpacity,
+  View, Text, TextInput, StyleSheet, FlatList, Image, TouchableOpacity, Keyboard,
 } from 'react-native';
 import { db } from '../firebase/config';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { useNavigation } from '@react-navigation/native';
+import { emit } from '../utils/eventBus';
 
 export default function SearchScreen() {
+  const navigation = useNavigation();
   const [allSongs, setAllSongs] = useState([]);
   const [qtext, setQtext] = useState('');
 
-  // ดึง songs ทั้งหมดแบบ realtime (ถ้าโตมากค่อยเปลี่ยนเป็น indexed search)
+  // ดึง songs ทั้งหมดแบบ realtime
   useEffect(() => {
     const qy = query(collection(db, 'songs'), orderBy('createdAt', 'desc'));
     const unsub = onSnapshot(qy, (snap) => {
@@ -29,7 +32,7 @@ export default function SearchScreen() {
     return () => unsub();
   }, []);
 
-  // กรองด้วย includes (lowercase) ทั้งชื่อเพลง + ศิลปิน
+  // กรองชื่อเพลง/ศิลปิน
   const results = useMemo(() => {
     const s = qtext.trim().toLowerCase();
     if (!s) return allSongs;
@@ -40,8 +43,14 @@ export default function SearchScreen() {
     );
   }, [qtext, allSongs]);
 
+  const handlePick = (songId) => {
+    Keyboard.dismiss();
+    emit('JUMP_TO_SONG', songId); // บอก Main ให้เลื่อนไปยังเพลงนี้
+    navigation.goBack();          // กลับไปหน้า MainScreen (ตัวเดิม ไม่ซ้อนใหม่)
+  };
+
   const renderItem = ({ item }) => (
-    <TouchableOpacity style={styles.row}>
+    <TouchableOpacity style={styles.row} onPress={() => handlePick(item.id)}>
       <Image
         source={{ uri: item.cover || 'https://i.imgur.com/7QdY7Yp.png' }}
         style={styles.thumb}
@@ -78,9 +87,7 @@ export default function SearchScreen() {
         keyExtractor={(it) => it.id}
         renderItem={renderItem}
         keyboardShouldPersistTaps="handled"
-        ListEmptyComponent={
-          <Text style={styles.empty}>No results</Text>
-        }
+        ListEmptyComponent={<Text style={styles.empty}>No results</Text>}
         contentContainerStyle={{ paddingBottom: 16 }}
       />
     </View>

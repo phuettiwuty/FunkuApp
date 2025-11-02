@@ -17,7 +17,7 @@ import {
   collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp,
 } from 'firebase/firestore';
 
-// Event bus: สั่งหยุดเสียงทุกตัวเมื่อสลับจอ/ไปหน้าอื่น
+// Event bus
 import { emit, on } from '../utils/eventBus';
 
 const { height } = Dimensions.get('window');
@@ -27,7 +27,7 @@ export default function MainScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
-  // เมื่อออกจาก MainScreen (เช่น ไปหน้าอื่นในสแตก) → หยุดเพลงทั้งหมด
+  // เมื่อออกจาก Main → หยุดเพลงทั้งหมด
   useFocusEffect(
     React.useCallback(() => {
       return () => emit('STOP_AUDIO');
@@ -40,7 +40,7 @@ export default function MainScreen() {
   };
 
   const goSearch = () => {
-    emit('STOP_AUDIO');
+    emit('STOP_AUDIO');        // หยุดชั่วคราวตอนเปิดหน้าค้นหา
     navigation.navigate('SearchScreen');
   };
 
@@ -53,7 +53,7 @@ export default function MainScreen() {
         <View style={{ flex: 1 }} />
         <IconButton
           icon="magnify"
-          size={35}
+          size={45}
           iconColor="#fff"
           onPress={goSearch}
           style={{ marginRight: 6 }}
@@ -76,11 +76,14 @@ export default function MainScreen() {
   );
 }
 
-/** ----------------- Feed: อ่านเพลง + กดหัวใจเก็บ likes ต่อ user ----------------- */
+/** ----------------- Feed: อ่านเพลง + กดหัวใจเก็บ likes ต่อ user + JUMP_TO_SONG ----------------- */
 function SongFeedScreen({ currentUser }) {
   const [songs, setSongs] = useState([]);
   const [likedIds, setLikedIds] = useState(new Set());
   const [currentIndex, setCurrentIndex] = useState(0);
+
+  const listRef = useRef(null);
+  const [pendingSongId, setPendingSongId] = useState(null); // รอเลื่อนไปเพลงนี้
 
   // READ: subscribe เพลง global
   useEffect(() => {
@@ -137,6 +140,35 @@ function SongFeedScreen({ currentUser }) {
     }
   };
 
+  // ฟังคำสั่ง "เลื่อนไปเพลงนี้"
+  useEffect(() => {
+    const off = on('JUMP_TO_SONG', (songId) => {
+      setPendingSongId(songId);
+    });
+    return off;
+  }, []);
+
+  // เมื่อมี pendingSongId และ songs พร้อม → เลื่อนไป index นั้น
+  useEffect(() => {
+    if (!pendingSongId || songs.length === 0) return;
+    const idx = songs.findIndex((s) => s.id === pendingSongId);
+    if (idx >= 0) {
+      try {
+        listRef.current?.scrollToIndex({ index: idx, animated: true });
+        setCurrentIndex(idx);
+      } catch (e) {
+        // กันพลาด: ถ้าเลื่อนไม่ทัน ลองเลื่อนอีกทีหลัง layout
+        setTimeout(() => {
+          try {
+            listRef.current?.scrollToIndex({ index: idx, animated: true });
+            setCurrentIndex(idx);
+          } catch {}
+        }, 50);
+      }
+    }
+    setPendingSongId(null);
+  }, [pendingSongId, songs]);
+
   const viewabilityConfig = { viewAreaCoveragePercentThreshold: 80 };
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) setCurrentIndex(viewableItems[0].index);
@@ -145,6 +177,7 @@ function SongFeedScreen({ currentUser }) {
   return (
     <View style={{ flex: 1, paddingBottom: 64 /* กันทับกับแถบล่าง */ }}>
       <FlatList
+        ref={listRef}
         data={songs}
         keyExtractor={(item) => item.id}
         renderItem={({ item, index }) => (
@@ -245,7 +278,7 @@ function SongFeedItem({ item, isActive, isLiked, onToggleLike }) {
     run();
   }, [isActive, isLoaded]);
 
-  // หยุดเพลงเมื่อได้รับสัญญาณจาก MainScreen
+  // หยุดเพลงเมื่อออกจาก Main
   useEffect(() => {
     const off = on('STOP_AUDIO', async () => {
       try {
@@ -393,7 +426,7 @@ const styles = StyleSheet.create({
   heartBox: { position: 'absolute', bottom: 120, alignSelf: 'center' },
   heart: { color: 'white', fontSize: 36 },
 
-  // top-right search bar container
+  // top bar
   topBar: {
     position: 'absolute',
     top: 0, left: 0, right: -10,
