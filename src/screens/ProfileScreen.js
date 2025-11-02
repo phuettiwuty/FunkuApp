@@ -6,15 +6,20 @@ import {
 } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useNavigation } from '@react-navigation/native';
+
+// ✅ ใช้ path ตามที่กำหนด
 import { auth, db } from '../firebase/config';
 import { useAuth } from '../context/AuthContext';
-import { collection, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+
+import {
+  collection, onSnapshot, doc, updateDoc, serverTimestamp
+} from 'firebase/firestore';
 import { updateProfile, signOut } from 'firebase/auth';
-import { IconButton } from 'react-native-paper'; // ใช้ไอคอน Hamburger บน header
+import { IconButton } from 'react-native-paper';
 
 export default function ProfileScreen({ currentUser }) {
   const navigation = useNavigation();
-  const headerHeight = useHeaderHeight(); // <<< กันโดน header บัง
+  const headerHeight = useHeaderHeight();
   const { user: ctxUser, profileDoc } = useAuth();
   const user = currentUser || ctxUser || auth.currentUser;
 
@@ -23,6 +28,10 @@ export default function ProfileScreen({ currentUser }) {
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [photoURL, setPhotoURL] = useState(user?.photoURL || '');
 
+  // premium badge
+  const [isPremium, setIsPremium] = useState(false);
+
+  // แสดง SongsGlobal เฉพาะ jed
   const isJed =
     (user?.displayName?.toLowerCase?.() === 'jed') ||
     (profileDoc?.displayName?.toLowerCase?.() === 'jed');
@@ -30,7 +39,7 @@ export default function ProfileScreen({ currentUser }) {
   // ===== Slide-out Panel =====
   const PANEL_WIDTH = 300;
   const [panelOpen, setPanelOpen] = useState(false);
-  const slideX = useRef(new Animated.Value(PANEL_WIDTH)).current; // เริ่มอยู่นอกจอขวา
+  const slideX = useRef(new Animated.Value(PANEL_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
   const openPanel = () => {
@@ -63,6 +72,15 @@ export default function ProfileScreen({ currentUser }) {
     const unsub = onSnapshot(collection(db, 'users', user.uid, 'likes'), (snap) => {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setLikes(list);
+    });
+    return () => unsub && unsub();
+  }, [user?.uid]);
+
+  // READ: premium flag realtime -> users/{uid}.premium
+  useEffect(() => {
+    if (!user?.uid) return;
+    const unsub = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+      setIsPremium(!!snap.data()?.premium);
     });
     return () => unsub && unsub();
   }, [user?.uid]);
@@ -130,7 +148,12 @@ export default function ProfileScreen({ currentUser }) {
 
         {!editing ? (
           <>
-            <Text style={styles.name}>{user?.displayName || 'User'}</Text>
+            {/* ชื่อ + ป้าย premium */}
+            <Text style={styles.name}>
+              {user?.displayName || 'User'}
+              {isPremium && <Text style={styles.premiumBadge}>  premium</Text>}
+            </Text>
+
             <Text style={styles.subText}>{user?.email}</Text>
 
             <View style={styles.statsRow}>
@@ -207,12 +230,10 @@ export default function ProfileScreen({ currentUser }) {
       {/* ===== Overlay + Slide-out Panel ===== */}
       {panelOpen && (
         <>
-          {/* พื้นที่ทึบคลิกปิด */}
           <Pressable style={StyleSheet.absoluteFill} onPress={closePanel}>
             <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]} />
           </Pressable>
 
-          {/* แผงเมนูด้านขวา */}
           <Animated.View
             style={[
               styles.panel,
@@ -286,7 +307,7 @@ const styles = StyleSheet.create({
   topCard: {
     backgroundColor: 'white',
     marginHorizontal: 16,
-    marginTop: 8, // ขยับลงอีกนิด เผื่ออุปกรณ์ header สูง
+    marginTop: 8,
     borderRadius: 18,
     paddingTop: AVATAR_SIZE / 2 + 10,
     paddingBottom: 18,
@@ -312,6 +333,7 @@ const styles = StyleSheet.create({
   avatar: { width: '100%', height: '100%' },
 
   name: { fontSize: 18, fontWeight: '700', color: '#111', marginTop: 6 },
+  premiumBadge: { color: '#6b7280', fontWeight: '800' }, // << ป้าย premium
   subText: { color: '#9ca3af', marginTop: 2, fontSize: 13 },
 
   editBtn: {

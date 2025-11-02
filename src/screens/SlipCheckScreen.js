@@ -13,7 +13,7 @@ import { emit } from '../utils/eventBus';
 // ===== เปลี่ยนเป็นค่าจริงของคุณ =====
 const API_URL = 'https://api.slipok.com/api/line/apikey/55496';
 const AUTH_TOKEN = 'SLIPOK6JT9BS3';
-const TARGET_RECEIVER = 'ด.ช. พฤฒิวุฒิ ยุทธชนะ';
+const TARGET_RECEIVER = 'ด.ช. พฤฒิวุฒิ ย';
 
 export default function SlipCheckScreen() {
   const navigation = useNavigation();

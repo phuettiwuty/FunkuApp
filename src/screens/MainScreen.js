@@ -122,25 +122,34 @@ export default function MainScreen() {
 
       {/* Paywall Modal (บังคับให้จ่าย) */}
       <Modal
-        visible={paywallOpen}
-        animationType="fade"
-        transparent
-        onRequestClose={() => {}}
-      >
-        <View style={styles.paywallBackdrop}>
-          <View style={styles.paywallBox}>
-            <Text style={styles.paywallTitle}>ปลดล็อกฟังเพลงเต็มตลอดชีพ</Text>
-            <Text style={styles.paywallText}>
-              ตอนนี้คุณสามารถฟังได้ฟรี {FREE_PREVIEW_MS / 1000} วินาทีต่อเพลง
-              หากต้องการฟังเต็มทุกเพลงและตลอดชีพ โปรดสแกนชำระเงินครั้งเดียว
-            </Text>
-            <Image source={QR_SOURCE} style={styles.qr} />
-            <Pressable style={styles.payBtn} onPress={confirmPayment}>
-              <Text style={styles.payBtnText}>ยืนยันการชำระเงิน / ตรวจสลิป</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+  visible={paywallOpen}
+  animationType="fade"
+  transparent
+  onRequestClose={() => setPaywallOpen(false)} // ปุ่ม back Android ปิดได้
+>
+  {/* แตะพื้นหลังเพื่อปิด */}
+  <Pressable style={styles.paywallBackdrop} onPress={() => setPaywallOpen(false)}>
+    {/* กดภายในกล่องจะไม่ปิด (จับทัชไว้ที่กล่อง) */}
+    <Pressable style={styles.paywallBox} onPress={() => {}}>
+      {/* ปุ่มปิดมุมขวาบน */}
+      <Pressable style={styles.closeBtn} onPress={() => setPaywallOpen(false)} hitSlop={10}>
+        <Text style={styles.closeTxt}>×</Text>
+      </Pressable>
+
+      <Text style={styles.paywallTitle}>ปลดล็อกฟังเพลงเต็มตลอดชีพ</Text>
+      <Text style={styles.paywallText}>
+        ตอนนี้คุณสามารถฟังได้ฟรี {FREE_PREVIEW_MS / 1000} วินาทีต่อเพลง
+        หากต้องการฟังเต็มทุกเพลงและตลอดชีพ โปรดสแกนชำระเงินครั้งเดียว
+      </Text>
+
+      <Image source={QR_SOURCE} style={styles.qr} />
+
+      <Pressable style={styles.payBtn} onPress={confirmPayment}>
+        <Text style={styles.payBtnText}>ยืนยันการชำระเงิน / ตรวจสลิป</Text>
+      </Pressable>
+    </Pressable>
+  </Pressable>
+</Modal>
 
       {/* แถบล่าง (Home / Profile) */}
       <View style={styles.bottomBar}>
@@ -566,4 +575,19 @@ const styles = StyleSheet.create({
   tabActive: { backgroundColor: '#111827' },
   tabText: { color: 'gray', fontWeight: '700' },
   tabTextActive: { color: 'white' },
+  closeBtn: {
+  position: 'absolute',
+  top: 8,
+  right: 8,
+  width: 32,
+  height: 32,
+  borderRadius: 16,
+  alignItems: 'center',
+  justifyContent: 'center',
+},
+closeTxt: {
+  fontSize: 28,
+  lineHeight: 28,
+  color: '#9ca3af',
+},
 });
